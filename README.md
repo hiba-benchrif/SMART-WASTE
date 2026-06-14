@@ -1,3 +1,13 @@
+---
+title: SmartWaste Smart City System
+emoji: 🗑️
+colorFrom: green
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 🗑️ SmartWaste Smart City System
 
 > Système intelligent de gestion des poubelles urbaines — Casablanca, Maroc 🇲🇦  
