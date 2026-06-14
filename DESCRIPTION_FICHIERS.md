@@ -95,6 +95,20 @@ C'est une protection contre les race conditions au démarrage.
 
 ---
 
+### `Dockerfile` (à la racine)
+
+**Pourquoi ce fichier existe :**
+Il permet le déploiement Cloud automatisé sur **Hugging Face Spaces**. 
+Hugging Face s'attend à trouver un Dockerfile à la racine pour construire l'application.
+
+**Ce qu'il fait :**
+- Utilise une image Python 3.11 allégée (`slim`).
+- Installe les dépendances du projet (`requirements.txt`).
+- Expose le port `7860` (une exigence stricte de la plateforme Hugging Face).
+- Lance le serveur unifié (qui sert à la fois les API et les pages web) avec `gunicorn` (serveur de production).
+
+---
+
 ### `.env`
 
 **Pourquoi ce fichier existe :**
@@ -711,6 +725,19 @@ Indispensable pour le développement et les démonstrations.
 - Affichage coloré dans le terminal avec barres ASCII
 - Envoi via `send_data.py` toutes les `INTERVAL_SECONDS` secondes
 - Fonctionne sur Windows, Linux, macOS (pas de GPIO)
+
+---
+
+### `smartwaste.service` (Non versionné - Créé sur le Pi)
+
+**Pourquoi ce fichier existe :**
+Dans un déploiement réel, le Raspberry Pi n'a ni écran ni clavier. Il doit lancer le programme de mesure automatiquement lorsqu'il s'allume.
+
+**Ce qu'il fait :**
+- C'est un fichier de configuration `systemd` placé dans `/etc/systemd/system/`.
+- Attend que le Raspberry Pi soit connecté au Wi-Fi (`After=network-online.target`).
+- Lance l'environnement virtuel Python et exécute `sensor.py` de manière invisible (en tâche de fond).
+- Redémarre automatiquement le script s'il venait à planter (`Restart=always`).
 
 ---
 
