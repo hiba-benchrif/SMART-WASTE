@@ -44,7 +44,7 @@ class Config:
     # ─── Raspberry Pi API Key ─────────────────────────────────────────────────
     # Le hash SHA-256 de la clé API utilisée par le Raspberry Pi.
     # Le backend stocke le hash, jamais la clé en clair (sécurité).
-    PI_API_KEY_HASH = os.getenv("PI_API_KEY_HASH", "")
+    PI_API_KEY_HASH = os.getenv("PI_API_KEY_HASH", "e2b25820669cfa6b98d16762870d3c24d61ac30be65af1ec572c454ed2b101ad")
 
     # ─── CORS ─────────────────────────────────────────────────────────────────
     # Origines autorisées à appeler l'API depuis un navigateur.
