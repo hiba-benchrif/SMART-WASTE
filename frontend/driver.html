@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Chauffeur - SmartWaste</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .driver-layout {
+      display: grid;
+      grid-template-columns: minmax(320px, 380px) 1fr;
+      gap: 1.5rem;
+      padding: 1.5rem;
+      min-height: calc(100vh - 70px);
+    }
+
+    .alerts-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .alert-item {
+      padding: 1rem;
+      border-radius: var(--radius-md);
+      border-left: 4px solid;
+      background: white;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .alert-item:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateX(4px);
+    }
+
+    .alert-item.empty {
+      border-left-color: #10b981;
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .alert-item.warning {
+      border-left-color: #f59e0b;
+      background: rgba(245, 158, 11, 0.05);
+    }
+
+    .alert-item.critical {
+      border-left-color: #ef4444;
+      background: rgba(239, 68, 68, 0.08);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.8; }
+    }
+
+    .alert-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+    }
+
+    .alert-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 700;
+      font-size: 0.875rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      background: white;
+    }
+
+    .alert-status.empty {
+      color: #10b981;
+      background: rgba(16, 185, 129, 0.1);
+    }
+
+    .alert-status.warning {
+      color: #f59e0b;
+      background: rgba(245, 158, 11, 0.1);
+    }
+
+    .alert-status.critical {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+      font-weight: 800;
+    }
+
+    .alert-detail {
+      color: var(--text-secondary);
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+      line-height: 1.5;
+    }
+
+    .fill-bar {
+      width: 100%;
+      height: 6px;
+      background: #e5e7eb;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 0.75rem;
+    }
+
+    .fill-bar-progress {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #6ee7b7);
+      transition: width 0.3s ease;
+    }
+
+    .fill-bar-progress.warning {
+      background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    }
+
+    .fill-bar-progress.critical {
+      background: linear-gradient(90deg, #ef4444, #f87171);
+    }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: var(--radius-md);
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      color: white;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .action-btn:hover {
+      box-shadow: var(--shadow-md);
+      transform: translateY(-2px);
+    }
+
+    .action-btn:active {
+      transform: translateY(0);
+    }
+
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .stat-box {
+      padding: 0.75rem;
+      background: linear-gradient(135deg, rgba(5, 150, 105, 0.1), rgba(16, 185, 129, 0.05));
+      border: 1px solid rgba(5, 150, 105, 0.2);
+      border-radius: var(--radius-md);
+      text-align: center;
+    }
+
+    .stat-box span {
+      display: block;
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-box small {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-weight: 600;
+    }
+
+    .notification {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      padding: 1rem 1.5rem;
+      background: white;
+      border-left: 4px solid #ef4444;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+      z-index: 1000;
+      animation: slideInRight 0.3s ease;
+      max-width: 350px;
+    }
+
+    .notification.success {
+      border-left-color: #10b981;
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    @media (max-width: 900px) {
+      .driver-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topbar">
+    <a class="brand" href="index.html"><span>♻️</span>SmartWaste</a>
+    <div>
+      <a href="citizen.html"><i class="fas fa-user"></i> Citoyen</a>
+      <a class="active" href="driver.html"><i class="fas fa-truck"></i> Chauffeur</a>
+      <a href="admin.html"><i class="fas fa-chart-line"></i> Admin</a>
+    </div>
+  </nav>
+
+  <main class="driver-layout">
+    <!-- Panel de contrôle et alertes -->
+    <section class="panel control-panel">
+      <div class="panel-title">
+        <h2>🚛 Dashboard Chauffeur</h2>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-box">
+          <span id="totalBins">0</span>
+          <small>Total poubelles</small>
+        </div>
+        <div class="stat-box">
+          <span id="criticalCount">0</span>
+          <small>Critiques ⚠️</small>
+        </div>
+      </div>
+
+      <!-- Connexion -->
+      <form id="loginForm" class="login-form">
+        <input name="email" value="driver@smartwaste.local" placeholder="Email">
+        <input name="password" value="driver12345" type="password" placeholder="Mot de passe">
+        <button type="submit" class="primary-action"><i class="fas fa-sign-in-alt"></i> Connexion</button>
+      </form>
+
+      <!-- Boutons d'action -->
+      <div style="display: grid; gap: 0.75rem; margin-bottom: 1rem;">
+        <button id="routeBtn" class="action-btn" style="width: 100%; background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white;">
+          <i class="fas fa-map-route"></i> Route Optimisée
+        </button>
+        <button id="refreshBtn" class="action-btn" style="width: 100%; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white;">
+          <i class="fas fa-sync-alt"></i> Rafraîchir
+        </button>
+      </div>
+
+      <!-- Titre Alertes -->
+      <div class="panel-title">
+        <h3>🚨 Alertes & Priorités</h3>
+      </div>
+
+      <!-- Liste des alertes -->
+      <div id="alertsList" class="alerts-section"></div>
+
+      <p class="muted" style="margin-top: 1rem; font-size: 0.875rem;">
+        <i class="fas fa-info-circle"></i> Les poubelles au-delà de 80% sont prioritaires
+      </p>
+    </section>
+
+    <!-- Carte interactive -->
+    <section class="map-wrap">
+      <div class="map-toolbar">
+        <span class="legend" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid #10b981;">
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; flex-shrink: 0;"></span> 0–50%
+        </span>
+        <span class="legend" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; border: 1px solid #f59e0b;">
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #f59e0b; flex-shrink: 0;"></span> 50–79%
+        </span>
+        <span class="legend" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid #ef4444;">
+          <span style="width: 12px; height: 12px; border-radius: 50%; background: #ef4444; flex-shrink: 0;"></span> 80–100%
+        </span>
+      </div>
+      <div id="map" class="map"></div>
+    </section>
+  </main>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="js/api.js?v=2"></script>
+  <script src="js/map.js?v=2"></script>
+  <script src="js/app.js?v=2"></script>
+
+  <script>
+    let allBins = [];
+
+    // Créer marqueur coloré
+    function getMarkerColor(fillLevel) {
+      if (fillLevel < 50) return '#10b981'; // Vert
+      if (fillLevel < 80) return '#f59e0b'; // Orange
+      return '#ef4444'; // Rouge
+    }
+
+    function createMarker(bin) {
+      const color = getMarkerColor(bin.fill_level);
+      const html = `<div style="width: 30px; height: 30px; background: ${color}; border: 3px solid white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+        ${Math.round(bin.fill_level / 20)}
+      </div>`;
+      
+      const marker = L.marker([bin.latitude, bin.longitude], {
+        icon: L.divIcon({
+          html: html,
+          iconSize: [30, 30],
+          className: 'custom-marker'
+        })
+      });
+
+      marker.bindPopup(`<strong>${bin.street}</strong><br>${bin.name}<br>Remplissage: ${bin.fill_level}%`);
+      marker.addTo(smartMap);
+    }
+
+    // Charger les données
+    async function loadBins() {
+      try {
+        allBins = await apiRequest("/bins");
+        updateStats();
+        drawBins(allBins);
+        renderAlerts(allBins);
+        
+        // Afficher les marqueurs
+        if (smartMap) {
+          allBins.forEach(createMarker);
+        }
+      } catch (error) {
+        console.error("Erreur chargement bins:", error);
+      }
+    }
+
+    // Mettre à jour les stats
+    function updateStats() {
+      const critical = allBins.filter(b => b.fill_level >= 80).length;
+      document.getElementById('totalBins').textContent = allBins.length;
+      document.getElementById('criticalCount').textContent = critical;
+    }
+
+    // Afficher les alertes
+    function renderAlerts(bins) {
+      const alertsList = document.getElementById('alertsList');
+      const sorted = [...bins].sort((a, b) => b.fill_level - a.fill_level);
+      
+      alertsList.innerHTML = sorted.map(bin => {
+        const statusClass = bin.fill_level < 50 ? 'empty' : bin.fill_level < 80 ? 'warning' : 'critical';
+        const statusText = bin.fill_level < 50 ? '🟢 Libre' : bin.fill_level < 80 ? '🟡 Moyen' : '🔴 Critique!';
+        const icon = bin.fill_level < 50 ? '📍' : bin.fill_level < 80 ? '⚠️' : '🚨';
+        
+        return `
+          <div class="alert-item ${statusClass}">
+            <div class="alert-header">
+              <span style="font-size: 1rem;">${icon} ${bin.street || 'Rue non définie'}</span>
+              <span class="alert-status ${statusClass}">${statusText}</span>
+            </div>
+            <div class="alert-detail">
+              <strong>${bin.name}</strong> - ${bin.zone || 'Zone non définie'}<br>
+              <small>${bin.latitude.toFixed(4)}, ${bin.longitude.toFixed(4)}</small>
+            </div>
+            <div class="fill-bar">
+              <div class="fill-bar-progress ${statusClass}" style="width: ${bin.fill_level}%"></div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; font-weight: 700; font-size: 0.875rem;">
+              <span>${bin.fill_level}%</span>
+              ${bin.fill_level >= 80 ? `
+                <button class="action-btn" onclick="markAsCollected('${bin.id}')">
+                  <i class="fas fa-check"></i> Collectée
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Marquer comme collectée
+    async function markAsCollected(binId) {
+      try {
+        await apiRequest(`/bins/${binId}`, 'PUT', { fill_level: 0 });
+        showNotification('Poubelle marquée comme collectée ✅', 'success');
+        await loadBins();
+      } catch (error) {
+        showNotification('Erreur lors de la mise à jour', 'error');
+      }
+    }
+
+    // Notification
+    function showNotification(message, type = 'error') {
+      const notif = document.createElement('div');
+      notif.className = `notification ${type}`;
+      notif.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i> ${message}`;
+      document.body.appendChild(notif);
+      
+      setTimeout(() => notif.remove(), 3000);
+    }
+
+    // Attacher le formulaire de login
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = new FormData(e.target);
+      try {
+        const user = await login(data.get("email"), data.get("password"));
+        showNotification(`Connecté comme ${user.role} ✅`, 'success');
+        loadBins();
+      } catch (error) {
+        showNotification(error.message, 'error');
+      }
+    });
+
+    // Bouton Rafraîchir
+    document.getElementById('refreshBtn').addEventListener('click', loadBins);
+
+    // Initialiser les données
+    loadBins();
+  </script>
+</body>
+</html>

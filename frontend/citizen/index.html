@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="SmartWaste Citoyen — Trouvez la poubelle disponible la plus proche de vous à Casablanca" />
+  <title>Poubelles Proches — SmartWaste Citoyen</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="../shared/css/style.css" />
+</head>
+<body style="overflow:hidden;">
+
+<!-- Navigation -->
+<nav class="topbar">
+  <a href="../index.html" class="topbar-brand">
+    <div class="topbar-logo">🗑️</div>
+    SmartWaste
+  </a>
+  <div class="topbar-nav">
+    <a href="../citizen/index.html" class="active">🗺️ Citoyen</a>
+    <a href="../login.html">🔐 Chauffeur / Admin</a>
+  </div>
+  <div class="topbar-actions">
+    <span id="gps-status" style="font-size:0.8125rem; color:var(--text-muted);">
+      <i class="fas fa-map-marker-alt"></i> Position non définie
+    </span>
+  </div>
+</nav>
+
+<!-- Mise en page principale : panneau gauche + carte -->
+<div class="citizen-layout">
+
+  <!-- ── Panneau latéral gauche ──────────────────────────────────────────── -->
+  <div class="citizen-panel">
+
+    <!-- En-tête du panneau -->
+    <div class="citizen-panel-header">
+      <h2><i class="fas fa-map-marker-alt"></i> Poubelles Proches</h2>
+      <p>Trouvez une poubelle disponible autour de vous</p>
+    </div>
+
+    <div class="citizen-panel-body">
+
+      <!-- Bouton de géolocalisation -->
+      <button id="btn-locate" class="btn btn-primary btn-full" onclick="locateUser()" style="margin-bottom:1rem;">
+        <i class="fas fa-crosshairs"></i> Localiser ma position
+      </button>
+
+      <!-- Poubelle la plus proche (highlight) -->
+      <div id="nearest-box" class="nearest-bin-box hidden">
+        <div style="font-size:0.75rem; font-weight:600; color:var(--primary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.5rem;">
+          <i class="fas fa-star"></i> Plus proche disponible
+        </div>
+        <div id="nearest-name" style="font-weight:700; font-size:1rem; color:var(--text-primary); margin-bottom:0.25rem;"></div>
+        <div id="nearest-info" style="font-size:0.8125rem; color:var(--text-secondary); margin-bottom:0.75rem;"></div>
+        <a id="nearest-gmaps" href="#" target="_blank" rel="noopener" class="btn btn-primary btn-sm btn-full">
+          <i class="fas fa-map-marker-alt"></i> Ouvrir dans Google Maps
+        </a>
+      </div>
+
+      <div id="nearest-none" class="nearest-bin-box no-bin hidden">
+        <div style="font-size:0.875rem; color:var(--danger); font-weight:600;">
+          <i class="fas fa-exclamation-triangle"></i> Aucune poubelle disponible dans un rayon de 2 km
+        </div>
+        <div style="font-size:0.8125rem; color:var(--text-secondary); margin-top:0.5rem;">
+          Essayez d'augmenter le rayon de recherche.
+        </div>
+      </div>
+
+      <!-- Légende des couleurs -->
+      <div style="display:flex; gap:0.75rem; margin-bottom:1rem; flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:4px;font-size:0.75rem;color:var(--text-secondary);">
+          <div style="width:12px;height:12px;border-radius:50%;background:#10b981;"></div> Disponible (0-49%)
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:0.75rem;color:var(--text-secondary);">
+          <div style="width:12px;height:12px;border-radius:50%;background:#f59e0b;"></div> Mi-remplie (50-79%)
+        </div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:0.75rem;color:var(--text-secondary);">
+          <div style="width:12px;height:12px;border-radius:50%;background:#ef4444;"></div> Pleine (≥80%)
+        </div>
+      </div>
+
+      <!-- Filtres -->
+      <div class="filter-tabs" id="filter-tabs">
+        <button class="filter-tab active" data-filter="all"       onclick="applyFilter('all',this)">Toutes</button>
+        <button class="filter-tab"        data-filter="available" onclick="applyFilter('available',this)">Disponibles</button>
+        <button class="filter-tab"        data-filter="full"      onclick="applyFilter('full',this)">Pleines</button>
+      </div>
+
+      <!-- Liste des poubelles proches -->
+      <div id="bins-list">
+        <div class="empty-state">
+          <i class="fas fa-crosshairs"></i>
+          <p>Cliquez sur "Localiser ma position"<br/>pour voir les poubelles proches</p>
+        </div>
+      </div>
+
+    </div><!-- fin panel-body -->
+  </div><!-- fin citizen-panel -->
+
+  <!-- ── Carte Leaflet ────────────────────────────────────────────────────── -->
+  <div class="map-container">
+    <div id="map"></div>
+  </div>
+
+</div><!-- fin citizen-layout -->
+
+<!-- Scripts -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="../shared/js/api.js"></script>
+<script src="../shared/js/map.js"></script>
+<script>
+  // État global de la page
+  let allBins       = [];   // Toutes les poubelles chargées
+  let nearbyBins    = [];   // Poubelles dans le rayon de l'utilisateur
+  let currentFilter = 'all';
+  let userPos       = null; // {lat, lng} de l'utilisateur
+
+  /** Initialisation au chargement de la page */
+  window.addEventListener('DOMContentLoaded', async () => {
+    // Initialiser la carte centrée sur Casablanca
+    initMap('map', 33.5731, -7.5898, 12);
+
+    // Charger et afficher toutes les poubelles
+    try {
+      allBins = await getBins();
+      drawBinsOnMap(allBins, onMarkerClick);
+    } catch (err) {
+      showToast('Erreur de chargement des poubelles : ' + err.message, 'error');
+    }
+  });
+
+  /** Géolocalise l'utilisateur et cherche les poubelles proches */
+  async function locateUser() {
+    const btn = document.getElementById('btn-locate');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner spin"></i> Localisation...';
+
+    try {
+      userPos = await getUserLocation();
+
+      // Afficher la position sur la carte
+      addUserMarker(userPos.lat, userPos.lng);
+      showRadiusCircle(userPos.lat, userPos.lng, 2);
+      centerMap(userPos.lat, userPos.lng, 14);
+
+      // Mettre à jour le statut GPS dans la navbar
+      document.getElementById('gps-status').innerHTML =
+        `<i class="fas fa-map-marker-alt" style="color:var(--primary);"></i> ${userPos.lat.toFixed(5)}, ${userPos.lng.toFixed(5)}`;
+
+      // Récupérer les poubelles proches via l'API (Haversine côté serveur)
+      nearbyBins = await getNearbyBins(userPos.lat, userPos.lng, 2);
+
+      // Afficher les marqueurs uniquement des poubelles proches
+      drawBinsOnMap(nearbyBins, onMarkerClick);
+
+      // Afficher la liste
+      renderBinsList(nearbyBins);
+
+      // Afficher la plus proche disponible
+      showNearestBin(nearbyBins);
+
+      btn.innerHTML = '<i class="fas fa-redo"></i> Actualiser';
+    } catch (err) {
+      showToast(err.message, 'error');
+      btn.innerHTML = '<i class="fas fa-crosshairs"></i> Localiser ma position';
+    }
+    btn.disabled = false;
+  }
+
+  /** Affiche la poubelle disponible la plus proche dans le panneau highlight */
+  function showNearestBin(bins) {
+    const nearestBox  = document.getElementById('nearest-box');
+    const nearestNone = document.getElementById('nearest-none');
+
+    // Cherche la première poubelle non-pleine (fill < 80%)
+    const available = bins.filter(b => b.fill_percentage < 80);
+
+    if (available.length > 0) {
+      const bin = available[0]; // Déjà trié par distance
+      document.getElementById('nearest-name').textContent = bin.name;
+      document.getElementById('nearest-info').innerHTML =
+        `📍 ${bin.address} &nbsp;·&nbsp; 📏 ${bin.distance_km} km &nbsp;·&nbsp; 🗑️ ${Math.round(bin.fill_percentage)}% pleine`;
+      document.getElementById('nearest-gmaps').href =
+        `https://maps.google.com/?q=${bin.latitude},${bin.longitude}`;
+
+      nearestBox.classList.remove('hidden');
+      nearestNone.classList.add('hidden');
+    } else {
+      nearestBox.classList.add('hidden');
+      nearestNone.classList.remove('hidden');
+    }
+  }
+
+  /** Rendu de la liste des poubelles dans le panneau latéral */
+  function renderBinsList(bins) {
+    const container = document.getElementById('bins-list');
+
+    if (bins.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="fas fa-search"></i>
+          <p>Aucune poubelle trouvée dans cette zone</p>
+        </div>`;
+      return;
+    }
+
+    // Appliquer le filtre actif
+    let filtered = bins;
+    if (currentFilter === 'available') filtered = bins.filter(b => b.fill_percentage < 80);
+    if (currentFilter === 'full')      filtered = bins.filter(b => b.fill_percentage >= 80);
+
+    container.innerHTML = filtered.map(bin => {
+      const statusClass = bin.fill_percentage < 50 ? 'empty' : bin.fill_percentage < 80 ? 'medium' : 'full';
+      const statusLabel = { empty: 'Disponible', medium: 'Mi-remplie', full: 'Pleine' }[statusClass];
+      const gmapsUrl    = `https://maps.google.com/?q=${bin.latitude},${bin.longitude}`;
+      const fill        = Math.round(bin.fill_percentage);
+
+      return `
+        <div class="bin-list-item ${statusClass}" onclick="focusBin(${bin.latitude}, ${bin.longitude})">
+          <div class="bin-item-header">
+            <span class="bin-item-name">${bin.name}</span>
+            <span class="badge badge-${statusClass}">${statusLabel}</span>
+          </div>
+          <div class="bin-item-addr"><i class="fas fa-map-marker-alt"></i> ${bin.address}</div>
+          <div style="margin-bottom:0.5rem;">
+            <div class="fill-bar" style="margin-bottom:4px;">
+              <div class="fill-bar-inner ${statusClass}" style="width:${fill}%;"></div>
+            </div>
+          </div>
+          <div class="bin-item-meta">
+            ${bin.distance_km !== undefined ? `<span class="bin-distance"><i class="fas fa-ruler"></i> ${bin.distance_km} km</span>` : ''}
+            <span class="fill-pct ${statusClass}">${fill}%</span>
+            <a href="${gmapsUrl}" target="_blank" rel="noopener"
+               class="btn btn-secondary btn-sm"
+               onclick="event.stopPropagation()"
+               style="padding:0.3rem 0.6rem; font-size:0.75rem;">
+              <i class="fas fa-directions"></i> Itinéraire
+            </a>
+          </div>
+          ${statusClass === 'full' ? `
+            <div style="margin-top:0.5rem; font-size:0.8rem; color:var(--danger); font-weight:500;">
+              ⚠️ Pleine — cherchez une alternative
+            </div>
+          ` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  /** Applique un filtre sur la liste des poubelles */
+  function applyFilter(filter, btn) {
+    currentFilter = filter;
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    const binsToShow = nearbyBins.length > 0 ? nearbyBins : allBins;
+    renderBinsList(binsToShow);
+  }
+
+  /** Centre la carte sur une poubelle quand on clique sur la liste */
+  function focusBin(lat, lng) {
+    centerMap(lat, lng, 17);
+  }
+
+  /** Callback quand on clique sur un marqueur de la carte */
+  function onMarkerClick(bin) {
+    // Scroll vers l'élément de la liste correspondant
+    centerMap(bin.latitude, bin.longitude, 17);
+  }
+</script>
+
+</body>
+</html>

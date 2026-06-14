@@ -1,0 +1,79 @@
+version: '3.8'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# docker-compose.yml — Orchestration des 3 services SmartWaste
+#
+# Services :
+#   db       : PostgreSQL 16 — base de données principale
+#   backend  : Flask + Gunicorn — API REST sur le port 5000
+#   frontend : Nginx — serveur des pages HTML sur le port 8080
+#
+# Réseau interne : smartwaste_net (les services communiquent par nom)
+# Volume persistant : postgres_data (les données survivent aux redémarrages)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Base de données PostgreSQL ─────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: smartwaste_db
+    environment:
+      POSTGRES_DB: smartwaste
+      POSTGRES_USER: smartwaste
+      POSTGRES_PASSWORD: smartwaste_password
+    volumes:
+      # Volume nommé pour persister les données entre les redémarrages
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    # Health check : attend que PostgreSQL soit prêt avant de démarrer le backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartwaste -d smartwaste"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - smartwaste_net
+
+  # ── Backend Flask ──────────────────────────────────────────────────────────
+  backend:
+    build: ./backend
+    container_name: smartwaste_backend
+    # Charge les variables d'environnement depuis le fichier .env
+    env_file: .env
+    depends_on:
+      db:
+        # Attend que le health check de db soit OK avant de démarrer
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      # Partage le dossier logs pour les lire depuis l'hôte
+      - ./backend/logs:/app/logs
+      # Partage les modèles ML pour les persister entre les redémarrages
+      - ./backend/ml/models:/app/ml/models
+    networks:
+      - smartwaste_net
+
+  # ── Frontend Nginx ─────────────────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    container_name: smartwaste_frontend
+    depends_on:
+      - backend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    networks:
+      - smartwaste_net
+
+# ── Volumes persistants ────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+
+# ── Réseau interne ─────────────────────────────────────────────────────────
+networks:
+  smartwaste_net:
+    driver: bridge

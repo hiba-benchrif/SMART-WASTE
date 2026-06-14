@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Connexion à SmartWaste — Tableau de bord Admin et Chauffeur" />
+  <title>Connexion — SmartWaste</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="shared/css/style.css" />
+</head>
+<body>
+
+<div class="login-page">
+  <div class="login-card">
+
+    <!-- Logo -->
+    <div class="login-logo">🗑️</div>
+    <h1 class="login-title">SmartWaste</h1>
+    <p class="login-subtitle">Connectez-vous à votre espace</p>
+
+    <!-- Formulaire de connexion -->
+    <form class="login-form" id="login-form" onsubmit="handleLogin(event)">
+
+      <!-- Message d'erreur -->
+      <div class="login-error" id="login-error"></div>
+
+      <div class="form-group">
+        <label class="form-label" for="identifier">
+          <i class="fas fa-user" style="margin-right:6px;opacity:0.6;"></i>Email ou nom d'utilisateur
+        </label>
+        <input
+          type="text"
+          id="identifier"
+          class="form-input"
+          placeholder="admin@smartwaste.local"
+          autocomplete="username"
+          required
+        />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">
+          <i class="fas fa-lock" style="margin-right:6px;opacity:0.6;"></i>Mot de passe
+        </label>
+        <div style="position:relative;">
+          <input
+            type="password"
+            id="password"
+            class="form-input"
+            placeholder="••••••••"
+            autocomplete="current-password"
+            required
+            style="padding-right:3rem;"
+          />
+          <button type="button" id="toggle-pwd"
+            style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:rgba(255,255,255,0.4);font-size:14px;"
+            onclick="togglePassword()">
+            <i class="fas fa-eye" id="pwd-icon"></i>
+          </button>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full btn-lg" id="submit-btn" style="margin-top:0.5rem;">
+        <i class="fas fa-sign-in-alt"></i>
+        Se connecter
+      </button>
+    </form>
+
+    <!-- Identifiants de démonstration -->
+    <div class="demo-creds">
+      <strong><i class="fas fa-info-circle" style="margin-right:6px;"></i>Comptes de démonstration</strong>
+      <div style="margin-bottom:6px;">
+        🔴 Admin : <code>admin@smartwaste.local</code> / <code>admin12345</code>
+      </div>
+      <div>
+        🔵 Chauffeur : <code>driver@smartwaste.local</code> / <code>driver12345</code>
+      </div>
+    </div>
+
+    <!-- Lien retour -->
+    <div style="text-align:center; margin-top:1.25rem;">
+      <a href="index.html" style="color:rgba(255,255,255,0.4); font-size:0.875rem; text-decoration:none;">
+        <i class="fas fa-arrow-left" style="margin-right:4px;"></i>Retour à l'accueil
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<script src="shared/js/api.js"></script>
+<script>
+  /**
+   * Gère la soumission du formulaire de connexion.
+   * Redirige vers le dashboard approprié selon le rôle.
+   */
+  async function handleLogin(event) {
+    event.preventDefault();
+
+    const identifier = document.getElementById('identifier').value.trim();
+    const password   = document.getElementById('password').value;
+    const btn        = document.getElementById('submit-btn');
+    const errorBox   = document.getElementById('login-error');
+
+    // Réinitialiser l'erreur
+    errorBox.style.display = 'none';
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner spin"></i> Connexion...';
+
+    try {
+      const result = await login(identifier, password);
+      const role = result.user.role;
+
+      // Redirection selon le rôle
+      if (role === 'admin') {
+        window.location.href = 'admin/index.html';
+      } else if (role === 'driver') {
+        window.location.href = 'driver/index.html';
+      } else {
+        window.location.href = 'index.html';
+      }
+    } catch (err) {
+      errorBox.textContent = err.message || 'Identifiants incorrects';
+      errorBox.style.display = 'block';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Se connecter';
+    }
+  }
+
+  /** Bascule la visibilité du mot de passe */
+  function togglePassword() {
+    const input = document.getElementById('password');
+    const icon  = document.getElementById('pwd-icon');
+    if (input.type === 'password') {
+      input.type = 'text';
+      icon.className = 'fas fa-eye-slash';
+    } else {
+      input.type = 'password';
+      icon.className = 'fas fa-eye';
+    }
+  }
+
+  // Si déjà connecté → rediriger directement
+  (function () {
+    const user = getUser();
+    if (user && getToken()) {
+      if (user.role === 'admin')  window.location.href = 'admin/index.html';
+      if (user.role === 'driver') window.location.href = 'driver/index.html';
+    }
+  })();
+</script>
+
+</body>
+</html>

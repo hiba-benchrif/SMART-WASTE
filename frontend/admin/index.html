@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="SmartWaste Admin — Tableau de bord de gestion des poubelles intelligentes" />
+  <title>Administration — SmartWaste</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="../shared/css/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ADMINISTRATION SmartWaste
+     Layout : sidebar fixe + contenu principal scrollable
+══════════════════════════════════════════════════════════════ -->
+<div class="admin-layout">
+
+  <!-- ── Sidebar de navigation ─────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">🗑️</div>
+      <div>
+        <div class="sidebar-title">SmartWaste</div>
+        <div class="sidebar-subtitle">Administration</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="sidebar-nav-item active" onclick="showSection('dashboard')" id="nav-dashboard">
+        <i class="fas fa-tachometer-alt"></i> Tableau de bord
+      </button>
+      <button class="sidebar-nav-item" onclick="showSection('bins')" id="nav-bins">
+        <i class="fas fa-trash-alt"></i> Poubelles
+      </button>
+      <button class="sidebar-nav-item" onclick="showSection('alerts')" id="nav-alerts">
+        <i class="fas fa-bell"></i> Alertes
+        <span class="sidebar-badge" id="alert-badge" style="display:none;">0</span>
+      </button>
+      <button class="sidebar-nav-item" onclick="showSection('predictions')" id="nav-predictions">
+        <i class="fas fa-brain"></i> Prédictions ML
+      </button>
+      <button class="sidebar-nav-item" onclick="showSection('users')" id="nav-users">
+        <i class="fas fa-users"></i> Utilisateurs
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div style="font-size:0.8125rem; color:rgba(255,255,255,0.4); margin-bottom:0.75rem;">
+        Connecté en tant que<br/>
+        <strong style="color:rgba(255,255,255,0.7);" id="sidebar-username">Admin</strong>
+      </div>
+      <button class="btn btn-ghost btn-sm btn-full" onclick="logout()" style="color:rgba(255,255,255,0.5); border-color:rgba(255,255,255,0.1);">
+        <i class="fas fa-sign-out-alt"></i> Déconnexion
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── Contenu principal ───────────────────────────────────────────────── -->
+  <main class="main-content">
+    <div class="content-area">
+
+      <!-- ══ SECTION 1 : TABLEAU DE BORD ══ -->
+      <section id="section-dashboard" class="content-section active">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+          <h1 class="section-title" style="margin-bottom:0;">Tableau de bord</h1>
+          <button class="btn btn-secondary btn-sm" onclick="initDemo()">
+            <i class="fas fa-database"></i> Données démo
+          </button>
+        </div>
+
+        <!-- 4 cartes stats -->
+        <div class="grid-4" style="margin-bottom:1.5rem;" id="stats-grid">
+          <div class="stat-card"><div class="stat-icon green"><i class="fas fa-trash-alt"></i></div><div><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total Poubelles</div></div></div>
+          <div class="stat-card"><div class="stat-icon red"><i class="fas fa-exclamation-circle"></i></div><div><div class="stat-value" id="stat-full">—</div><div class="stat-label">Poubelles Pleines</div></div></div>
+          <div class="stat-card"><div class="stat-icon orange"><i class="fas fa-bell"></i></div><div><div class="stat-value" id="stat-alerts">—</div><div class="stat-label">Alertes Actives</div></div></div>
+          <div class="stat-card"><div class="stat-icon blue"><i class="fas fa-chart-pie"></i></div><div><div class="stat-value" id="stat-avg">—</div><div class="stat-label">Niveau Moyen</div></div></div>
+        </div>
+
+        <!-- Graphiques ligne 1 -->
+        <div class="chart-row">
+          <div class="card">
+            <div class="card-header"><h3 style="font-size:1rem;">Évolution du remplissage (7 jours)</h3></div>
+            <div class="card-body"><div class="chart-container" style="height:220px;"><canvas id="chart-history"></canvas></div></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3 style="font-size:1rem;">Pic hebdomadaire par jour</h3></div>
+            <div class="card-body"><div class="chart-container" style="height:220px;"><canvas id="chart-peak"></canvas></div></div>
+          </div>
+        </div>
+
+        <!-- Graphiques ligne 2 -->
+        <div class="chart-row" style="margin-top:1.5rem;">
+          <div class="card">
+            <div class="card-header"><h3 style="font-size:1rem;">Distribution des états</h3></div>
+            <div class="card-body" style="display:flex; align-items:center; justify-content:center;">
+              <div style="width:200px; height:200px;"><canvas id="chart-distribution"></canvas></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3 style="font-size:1rem;">Alertes récentes</h3></div>
+            <div class="card-body" id="recent-alerts-list" style="padding:0.75rem;">
+              <div class="empty-state" style="padding:1.5rem;"><i class="fas fa-check-circle" style="color:var(--success);"></i><p>Aucune alerte récente</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ SECTION 2 : POUBELLES ══ -->
+      <section id="section-bins" class="content-section">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+          <h1 class="section-title" style="margin-bottom:0;">Gestion des poubelles</h1>
+          <button class="btn btn-primary" onclick="openBinModal()">
+            <i class="fas fa-plus"></i> Ajouter une poubelle
+          </button>
+        </div>
+        <div class="card">
+          <div class="table-wrapper">
+            <table id="bins-table">
+              <thead><tr>
+                <th>ID</th><th>Nom</th><th>Adresse</th><th>Remplissage</th><th>Statut</th><th>Dernière MàJ</th><th>Actions</th>
+              </tr></thead>
+              <tbody id="bins-tbody"><tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted);">Chargement...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ SECTION 3 : ALERTES ══ -->
+      <section id="section-alerts" class="content-section">
+        <h1 class="section-title">Alertes</h1>
+        <div class="filter-tabs">
+          <button class="filter-tab active" onclick="loadAlerts('active',this)">Actives</button>
+          <button class="filter-tab" onclick="loadAlerts('resolved',this)">Résolues</button>
+          <button class="filter-tab" onclick="loadAlerts('all',this)">Toutes</button>
+        </div>
+        <div id="alerts-container"></div>
+      </section>
+
+      <!-- ══ SECTION 4 : PRÉDICTIONS ML ══ -->
+      <section id="section-predictions" class="content-section">
+        <h1 class="section-title">Prédictions Machine Learning</h1>
+
+        <!-- Prédiction par poubelle -->
+        <div class="card" style="margin-bottom:1.5rem;">
+          <div class="card-header"><h3>Prédiction — Temps avant remplissage complet</h3></div>
+          <div class="card-body">
+            <div style="display:flex; gap:1rem; align-items:flex-end; margin-bottom:1.5rem; flex-wrap:wrap;">
+              <div class="form-group" style="flex:1; min-width:200px;">
+                <label class="form-label">Sélectionner une poubelle</label>
+                <select id="pred-bin-select" class="form-input"></select>
+              </div>
+              <button class="btn btn-primary" onclick="runPrediction()">
+                <i class="fas fa-brain"></i> Analyser
+              </button>
+            </div>
+            <div id="pred-result" style="display:none;">
+              <div class="prediction-card">
+                <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1.5rem;">
+                  <div><div class="prediction-value" id="pred-hours">—</div><div class="prediction-label">Heures restantes</div></div>
+                  <div><div class="prediction-value" id="pred-speed">—</div><div class="prediction-label">% remplissage / heure</div></div>
+                  <div><div class="prediction-value" id="pred-confidence">—</div><div class="prediction-label">Confiance</div></div>
+                </div>
+                <div style="margin-top:1rem; color:rgba(255,255,255,0.5); font-size:0.875rem;" id="pred-date"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pic hebdomadaire -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Pic hebdomadaire — Jour le plus chargé</h3>
+            <button class="btn btn-secondary btn-sm" onclick="loadWeeklyPeak()"><i class="fas fa-sync"></i> Analyser</button>
+          </div>
+          <div class="card-body">
+            <div id="peak-result">
+              <div class="empty-state"><i class="fas fa-calendar-week"></i><p>Cliquez sur "Analyser" pour détecter le pic</p></div>
+            </div>
+            <div style="margin-top:1.5rem; height:220px;"><canvas id="chart-peak-pred"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══ SECTION 5 : UTILISATEURS ══ -->
+      <section id="section-users" class="content-section">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+          <h1 class="section-title" style="margin-bottom:0;">Gestion des utilisateurs</h1>
+          <button class="btn btn-primary" onclick="openUserModal()"><i class="fas fa-user-plus"></i> Ajouter</button>
+        </div>
+        <div id="users-list" class="card">
+          <div class="card-body"><p style="color:var(--text-muted);">Chargement...</p></div>
+        </div>
+      </section>
+
+    </div><!-- fin content-area -->
+  </main>
+
+</div><!-- fin admin-layout -->
+
+<!-- ── Modales ──────────────────────────────────────────────────────────────── -->
+
+<!-- Modale Poubelle -->
+<div class="modal-overlay hidden" id="modal-bin">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-bin-title">Ajouter une poubelle</h3>
+      <button class="modal-close" onclick="closeBinModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="bin-id-hidden" />
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Nom *</label>
+          <input type="text" id="bin-name" class="form-input" placeholder="Poubelle Maarif 3" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Capacité (cm)</label>
+          <input type="number" id="bin-capacity" class="form-input" value="60" min="10" max="300" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Adresse *</label>
+        <input type="text" id="bin-address" class="form-input" placeholder="Rue Ibnou Sina, Maarif, Casablanca" />
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Latitude *</label>
+          <input type="number" id="bin-lat" class="form-input" step="0.0001" placeholder="33.5866" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Longitude *</label>
+          <input type="number" id="bin-lng" class="form-input" step="0.0001" placeholder="-7.6315" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Remplissage initial (%)</label>
+        <input type="number" id="bin-fill" class="form-input" value="0" min="0" max="100" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeBinModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveBin()"><i class="fas fa-save"></i> Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modale Utilisateur -->
+<div class="modal-overlay hidden" id="modal-user">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Ajouter un utilisateur</h3>
+      <button class="modal-close" onclick="closeUserModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Nom d'utilisateur *</label>
+        <input type="text" id="user-username" class="form-input" placeholder="driver2" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email *</label>
+        <input type="email" id="user-email" class="form-input" placeholder="driver2@smartwaste.local" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mot de passe *</label>
+        <input type="password" id="user-password" class="form-input" placeholder="••••••••" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rôle *</label>
+        <select id="user-role" class="form-input">
+          <option value="driver">Chauffeur</option>
+          <option value="admin">Administrateur</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeUserModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveUser()"><i class="fas fa-save"></i> Créer</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+
+<script src="../shared/js/api.js"></script>
+<script>
+  // ── Authentification ───────────────────────────────────────────────────────
+  const currentUser = requireAuth('admin');
+  if (currentUser) {
+    document.getElementById('sidebar-username').textContent = currentUser.username;
+  }
+
+  // Références aux graphiques Chart.js
+  let chartHistory = null, chartPeak = null, chartDist = null, chartPeakPred = null;
+  let editingBinId = null;
+  let allBinsCache = [];
+
+  // ── Initialisation ─────────────────────────────────────────────────────────
+  window.addEventListener('DOMContentLoaded', async () => {
+    await loadDashboard();
+    await loadBins();
+    await loadAlertBadge();
+    populateBinSelect();
+  });
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
+  function showSection(name) {
+    document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.sidebar-nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('section-' + name).classList.add('active');
+    document.getElementById('nav-' + name).classList.add('active');
+
+    if (name === 'alerts') loadAlerts('active', document.querySelector('.filter-tab'));
+    if (name === 'users')  loadUsers();
+  }
+
+  // ── Tableau de bord ─────────────────────────────────────────────────────────
+  async function loadDashboard() {
+    try {
+      const [stats, history, peak, alerts] = await Promise.all([
+        getStats(), getHistory(null, 7), getWeeklyPeak(), getAlerts('active')
+      ]);
+
+      document.getElementById('stat-total').textContent  = stats.total_bins;
+      document.getElementById('stat-full').textContent   = stats.full_bins;
+      document.getElementById('stat-alerts').textContent = stats.active_alerts_count;
+      document.getElementById('stat-avg').textContent    = stats.average_fill + '%';
+
+      renderHistoryChart(history);
+      renderPeakChart(peak);
+      renderDistributionChart(stats);
+      renderRecentAlerts(alerts.slice(0, 5));
+    } catch (err) {
+      showToast('Erreur chargement dashboard : ' + err.message, 'error');
+    }
+  }
+
+  function renderHistoryChart(data) {
+    const ctx = document.getElementById('chart-history').getContext('2d');
+    if (chartHistory) chartHistory.destroy();
+    chartHistory = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map(d => d.date || new Date(d.timestamp).toLocaleDateString('fr-FR')),
+        datasets: [{
+          label: 'Remplissage moyen (%)',
+          data: data.map(d => d.average_fill ?? d.fill_percentage),
+          borderColor: '#059669', backgroundColor: 'rgba(5,150,105,0.1)',
+          borderWidth: 2, fill: true, tension: 0.4, pointRadius: 3
+        }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } } }
+    });
+  }
+
+  function renderPeakChart(data) {
+    const ctx = document.getElementById('chart-peak').getContext('2d');
+    if (chartPeak) chartPeak.destroy();
+    const colors = data.day_stats.map(d => d.day === data.peak_day ? '#ef4444' : '#059669');
+    chartPeak = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.day_stats.map(d => d.day_name_fr),
+        datasets: [{ label: 'Remplissage moyen', data: data.day_stats.map(d => d.avg_fill), backgroundColor: colors, borderRadius: 6 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+        scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } } }
+    });
+  }
+
+  function renderDistributionChart(stats) {
+    const ctx = document.getElementById('chart-distribution').getContext('2d');
+    if (chartDist) chartDist.destroy();
+    const empty  = stats.total_bins - stats.full_bins - Math.round(stats.total_bins * 0.3);
+    const medium = Math.round(stats.total_bins * 0.3);
+    const full   = stats.full_bins;
+    chartDist = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Disponible', 'Mi-remplie', 'Pleine'],
+        datasets: [{ data: [Math.max(0,empty), medium, full], backgroundColor: ['#10b981','#f59e0b','#ef4444'], borderWidth: 0, hoverOffset: 6 }]
+      },
+      options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 12 } } } } }
+    });
+  }
+
+  function renderRecentAlerts(alerts) {
+    const el = document.getElementById('recent-alerts-list');
+    if (!alerts.length) { el.innerHTML = '<div class="empty-state" style="padding:1.5rem;"><i class="fas fa-check-circle" style="color:var(--success);"></i><p>Aucune alerte active</p></div>'; return; }
+    el.innerHTML = alerts.map(a => `
+      <div class="alert-card" style="margin-bottom:0.5rem;">
+        <div class="alert-header">
+          <span class="alert-title">${a.bin_name || 'Poubelle'}</span>
+          <span class="badge badge-active">Active</span>
+        </div>
+        <div class="alert-msg">${a.message}</div>
+        <div class="alert-time"><i class="fas fa-clock"></i> ${formatDate(a.created_at)}</div>
+      </div>`).join('');
+  }
+
+  // ── Poubelles ──────────────────────────────────────────────────────────────
+  async function loadBins() {
+    try {
+      allBinsCache = await getBins();
+      renderBinsTable(allBinsCache);
+      populateBinSelect();
+    } catch (err) { showToast('Erreur : ' + err.message, 'error'); }
+  }
+
+  function renderBinsTable(bins) {
+    const tbody = document.getElementById('bins-tbody');
+    if (!bins.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted);">Aucune poubelle</td></tr>'; return; }
+    tbody.innerHTML = bins.map(b => {
+      const sc = b.fill_percentage < 50 ? 'empty' : b.fill_percentage < 80 ? 'medium' : 'full';
+      const sl = { empty:'Disponible', medium:'Mi-remplie', full:'Pleine' }[sc];
+      return `<tr>
+        <td><span style="color:var(--text-muted);font-size:0.875rem;">#${b.id}</span></td>
+        <td><strong>${b.name}</strong></td>
+        <td style="font-size:0.875rem;color:var(--text-secondary);">${b.address}</td>
+        <td style="min-width:140px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="fill-bar" style="flex:1;"><div class="fill-bar-inner ${sc}" style="width:${b.fill_percentage}%;"></div></div>
+            <span class="fill-pct ${sc}" style="font-size:0.875rem;min-width:35px;">${Math.round(b.fill_percentage)}%</span>
+          </div>
+        </td>
+        <td><span class="badge badge-${sc}">${sl}</span></td>
+        <td style="font-size:0.8125rem;color:var(--text-muted);">${formatDate(b.last_updated)}</td>
+        <td>
+          <div style="display:flex;gap:0.5rem;">
+            <button class="btn btn-ghost btn-sm" onclick="editBin(${b.id})"><i class="fas fa-edit"></i></button>
+            <button class="btn btn-danger btn-sm" onclick="removeBin(${b.id},'${b.name.replace(/'/g,"\\'")}')" ><i class="fas fa-trash"></i></button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  function openBinModal(bin = null) {
+    editingBinId = bin ? bin.id : null;
+    document.getElementById('modal-bin-title').textContent = bin ? 'Modifier la poubelle' : 'Ajouter une poubelle';
+    document.getElementById('bin-id-hidden').value  = bin ? bin.id   : '';
+    document.getElementById('bin-name').value       = bin ? bin.name : '';
+    document.getElementById('bin-address').value    = bin ? bin.address : '';
+    document.getElementById('bin-lat').value        = bin ? bin.latitude  : '';
+    document.getElementById('bin-lng').value        = bin ? bin.longitude : '';
+    document.getElementById('bin-capacity').value   = bin ? bin.capacity_cm : 60;
+    document.getElementById('bin-fill').value       = bin ? bin.fill_percentage : 0;
+    document.getElementById('modal-bin').classList.remove('hidden');
+  }
+
+  function closeBinModal() { document.getElementById('modal-bin').classList.add('hidden'); editingBinId = null; }
+
+  function editBin(id) {
+    const bin = allBinsCache.find(b => b.id === id);
+    if (bin) openBinModal(bin);
+  }
+
+  async function saveBin() {
+    const payload = {
+      name: document.getElementById('bin-name').value.trim(),
+      address: document.getElementById('bin-address').value.trim(),
+      latitude: parseFloat(document.getElementById('bin-lat').value),
+      longitude: parseFloat(document.getElementById('bin-lng').value),
+      capacity_cm: parseFloat(document.getElementById('bin-capacity').value),
+      fill_percentage: parseFloat(document.getElementById('bin-fill').value),
+    };
+    if (!payload.name) { showToast('Le nom est requis', 'error'); return; }
+    try {
+      if (editingBinId) { await updateBin(editingBinId, payload); showToast('Poubelle mise à jour ✅', 'success'); }
+      else              { await createBin(payload);                showToast('Poubelle créée ✅', 'success'); }
+      closeBinModal();
+      await loadBins();
+    } catch (err) { showToast('Erreur : ' + err.message, 'error'); }
+  }
+
+  async function removeBin(id, name) {
+    if (!confirm(`Désactiver "${name}" ?`)) return;
+    try {
+      await deleteBin(id);
+      showToast('Poubelle désactivée', 'success');
+      await loadBins();
+    } catch (err) { showToast('Erreur : ' + err.message, 'error'); }
+  }
+
+  // ── Alertes ────────────────────────────────────────────────────────────────
+  async function loadAlerts(status, btn) {
+    if (btn) { document.querySelectorAll('#section-alerts .filter-tab').forEach(t => t.classList.remove('active')); btn.classList.add('active'); }
+    try {
+      const alerts = await getAlerts(status);
+      const container = document.getElementById('alerts-container');
+      if (!alerts.length) { container.innerHTML = '<div class="empty-state"><i class="fas fa-check-circle" style="color:var(--success);"></i><p>Aucune alerte</p></div>'; return; }
+      container.innerHTML = alerts.map(a => `
+        <div class="alert-card ${a.status}">
+          <div class="alert-header">
+            <span class="alert-title"><i class="fas fa-trash-alt"></i> ${a.bin_name || 'Poubelle'}</span>
+            <span class="badge badge-${a.status}">${a.status === 'active' ? 'Active' : 'Résolue'}</span>
+          </div>
+          <div class="alert-msg">${a.message}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem;">
+            <span class="alert-time"><i class="fas fa-clock"></i> ${formatDate(a.created_at)}</span>
+            ${a.status === 'active' ? `<button class="btn btn-secondary btn-sm" onclick="resolveAlertAction(${a.id})"><i class="fas fa-check"></i> Résoudre</button>` : ''}
+          </div>
+        </div>`).join('');
+    } catch (err) { showToast('Erreur : ' + err.message, 'error'); }
+  }
+
+  async function resolveAlertAction(id) {
+    try { await resolveAlert(id); showToast('Alerte résolue ✅', 'success'); await loadAlerts('active', null); await loadAlertBadge(); }
+    catch (err) { showToast('Erreur : ' + err.message, 'error'); }
+  }
+
+  async function loadAlertBadge() {
+    try {
+      const { active_count } = await getAlertCount();
+      const badge = document.getElementById('alert-badge');
+      if (active_count > 0) { badge.textContent = active_count; badge.style.display = 'inline'; }
+      else badge.style.display = 'none';
+    } catch (_) {}
+  }
+
+  // ── Prédictions ML ──────────────────────────────────────────────────────────
+  function populateBinSelect() {
+    const select = document.getElementById('pred-bin-select');
+    if (!select || !allBinsCache.length) return;
+    select.innerHTML = allBinsCache.map(b => `<option value="${b.id}">${b.name} (${Math.round(b.fill_percentage)}%)</option>`).join('');
+  }
+
+  async function runPrediction() {
+    const binId = document.getElementById('pred-bin-select').value;
+    if (!binId) { showToast('Sélectionnez une poubelle', 'error'); return; }
+    try {
+      const p = await getPrediction(binId);
+      document.getElementById('pred-hours').textContent       = p.hours_until_full != null ? p.hours_until_full + 'h' : '—';
+      document.getElementById('pred-speed').textContent       = p.fill_speed_per_hour + '%';
+      document.getElementById('pred-confidence').textContent  = { high:'🟢 Élevée', medium:'🟡 Moyenne', low:'🔴 Faible' }[p.confidence] || '—';
+      document.getElementById('pred-date').innerHTML          = p.predicted_full_at_utc ? `Pleine prévue le <strong>${formatDate(p.predicted_full_at_utc)}</strong>` : p.message || '';
+      document.getElementById('pred-result').style.display    = 'block';
+    } catch (err) { showToast('Erreur : ' + err.message, 'error'); }
+  }
+
+  async function loadWeeklyPeak() {
+    try {
+      const peak = await getWeeklyPeak();
+      document.getElementById('peak-result').innerHTML = `
+        <div style="text-align:center; padding:1rem;">
+          <div style="font-size:2.5rem; font-weight:900; color:var(--danger);">${peak.peak_day_name_fr}</div>
+          <div style="color:var(--text-secondary); font-size:0.9375rem; margin-top:0.5rem;">est le jour avec le plus fort remplissage</div>
+          ${peak.message ? `<div style="color:var(--text-muted);font-size:0.875rem;margin-top:0.5rem;">${peak.message}</div>` : ''}
+        </div>`;
+      // Graphique barres hebdomadaire
+      const ctx = document.getElementById('chart-peak-pred').getContext('2d');
+      if (chartPeakPred) chartPeakPred.destroy();
+      const colors = peak.day_stats.map(d => d.day === peak.peak_day ? '#ef4444' : '#10b981');
+      chartPeakPred = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: peak.day_stats.map(d => d.day_name_fr),
+          datasets: [{ label: 'Remplissage moyen (%)', data: peak.day_stats.map(d => d.avg_fill), backgroundColor: colors, borderRadius: 8 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 100 } } }
+      });
+    } catch (err) { showToast('Erreur : ' + err.message, 'error'); }
+  }
+
+  // ── Utilisateurs ───────────────────────────────────────────────────────────
+  function openUserModal() { document.getElementById('modal-user').classList.remove('hidden'); }
+  function closeUserModal() { document.getElementById('modal-user').classList.add('hidden'); }
+
+  async function saveUser() {
+    const payload = {
+      username: document.getElementById('user-username').value.trim(),
+      email:    document.getElementById('user-email').value.trim(),
+      password: document.getElementById('user-password').value,
+      role:     document.getElementById('user-role').value,
+    };
+    if (!payload.username || !payload.email || !payload.password) { showToast('Tous les champs sont requis', 'error'); return; }
+    try {
+      await register(payload);
+      showToast('Utilisateur créé ✅', 'success');
+      closeUserModal();
+      loadUsers();
+    } catch (err) { showToast('Erreur : ' + err.message, 'error'); }
+  }
+
+  async function loadUsers() {
+    const el = document.getElementById('users-list');
+    try {
+      // Simulation locale — on affiche le compte connecté
+      el.innerHTML = `<div class="card-body">
+        <p style="color:var(--text-secondary); margin-bottom:1rem;">
+          <i class="fas fa-info-circle"></i> Comptes de démonstration disponibles :
+        </p>
+        <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+          <div class="stat-card" style="flex:1; min-width:200px;">
+            <div class="stat-icon" style="background:rgba(139,92,246,0.12); color:#7c3aed;"><i class="fas fa-user-shield"></i></div>
+            <div><div class="stat-value" style="font-size:1.1rem;">admin</div><div class="stat-label badge badge-admin" style="margin-top:4px;">Administrateur</div></div>
+          </div>
+          <div class="stat-card" style="flex:1; min-width:200px;">
+            <div class="stat-icon" style="background:rgba(59,130,246,0.12); color:#2563eb;"><i class="fas fa-truck"></i></div>
+            <div><div class="stat-value" style="font-size:1.1rem;">driver</div><div class="stat-label badge badge-driver" style="margin-top:4px;">Chauffeur</div></div>
+          </div>
+        </div>
+        <p style="color:var(--text-muted); font-size:0.875rem; margin-top:1rem;">
+          Utilisez le bouton "Ajouter" pour créer de nouveaux comptes chauffeur ou admin.
+        </p>
+      </div>`;
+    } catch (err) { el.innerHTML = `<div class="card-body"><p>Erreur : ${err.message}</p></div>`; }
+  }
+
+  // ── Utilitaires ─────────────────────────────────────────────────────────────
+  async function initDemo() {
+    try { const r = await seedData(); showToast(r.message, 'success'); await loadDashboard(); await loadBins(); }
+    catch (err) { showToast(err.message, 'warning'); }
+  }
+</script>
+
+</body>
+</html>

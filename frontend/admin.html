@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin - SmartWaste</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <nav class="topbar">
+    <a class="brand" href="index.html"><span></span>SmartWaste</a>
+    <div><a href="citizen.html">Citoyen</a><a href="driver.html">Chauffeur</a><a class="active" href="admin.html">Admin</a></div>
+  </nav>
+  <main class="admin-layout">
+    <section class="panel admin-head">
+      <div>
+        <p class="eyebrow">Centre de controle</p>
+        <h1>Dashboard admin</h1>
+        <p class="muted">Suivi des poubelles, alertes actives, historique et statistiques de remplissage.</p>
+      </div>
+      <form id="loginForm" class="login-form inline-form">
+        <input name="email" value="admin@smartwaste.local" placeholder="Email">
+        <input name="password" value="admin12345" type="password" placeholder="Mot de passe">
+        <button>Connexion</button>
+      </form>
+    </section>
+
+    <section class="panel stat-panel">
+      <div class="stats-grid">
+        <div><span id="totalBins">0</span><small>Poubelles</small></div>
+        <div><span id="fullBins">0</span><small>Pleines</small></div>
+        <div><span id="avgFill">0%</span><small>Moyenne</small></div>
+      </div>
+      <div class="button-row">
+        <button id="seedBtn">Donnees demo</button>
+        <button id="statsBtn" class="primary-action">Actualiser</button>
+      </div>
+    </section>
+
+    <section class="panel chart-panel">
+      <div class="panel-title">
+        <h2>Historique de remplissage</h2>
+        <p class="muted">Evolution recente des mesures envoyees par les poubelles.</p>
+      </div>
+      <canvas id="fillChart"></canvas>
+    </section>
+
+    <section class="map-wrap admin-map-wrap">
+      <div class="map-toolbar">
+        <span class="legend empty">Vide</span>
+        <span class="legend medium">Moyenne</span>
+        <span class="legend full">Critique</span>
+      </div>
+      <div id="map" class="map admin-map"></div>
+    </section>
+
+    <section class="panel alerts-panel">
+      <div class="panel-title">
+        <h2>Alertes actives</h2>
+        <p class="muted">Poubelles qui necessitent une intervention.</p>
+      </div>
+      <div id="alertsList" class="list"></div>
+    </section>
+  </main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

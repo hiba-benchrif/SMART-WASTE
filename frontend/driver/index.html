@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="SmartWaste Chauffeur — Visualisez et collectez les poubelles prioritaires" />
+  <title>Tableau de bord Chauffeur — SmartWaste</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="../shared/css/style.css" />
+</head>
+<body style="overflow:hidden;">
+
+<!-- Navigation -->
+<nav class="topbar">
+  <a href="../index.html" class="topbar-brand">
+    <div class="topbar-logo">🗑️</div> SmartWaste
+  </a>
+  <div class="topbar-actions">
+    <span id="auto-refresh-timer" style="font-size:0.8125rem; color:var(--text-muted);"></span>
+    <div class="user-badge" id="user-info">
+      <i class="fas fa-truck"></i> <span id="user-name">Chauffeur</span>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="logout()">
+      <i class="fas fa-sign-out-alt"></i> Déconnexion
+    </button>
+  </div>
+</nav>
+
+<!-- Mise en page : sidebar + carte -->
+<div class="driver-layout">
+
+  <!-- ── Panneau latéral ─────────────────────────────────────────────────── -->
+  <div class="driver-sidebar">
+
+    <div class="driver-sidebar-header">
+      <h2 style="font-size:1.1rem; font-weight:700; margin-bottom:0.5rem;">
+        <i class="fas fa-route" style="color:var(--primary);"></i> Tournée de collecte
+      </h2>
+
+      <!-- Stats résumé -->
+      <div class="grid-2" style="margin-bottom:0.75rem;">
+        <div class="stat-card" style="padding:0.75rem; flex-direction:column; align-items:flex-start; gap:0.25rem;">
+          <span style="font-size:1.5rem; font-weight:800; color:var(--text-primary);" id="stat-total">—</span>
+          <span style="font-size:0.75rem; color:var(--text-secondary);">Poubelles</span>
+        </div>
+        <div class="stat-card" style="padding:0.75rem; flex-direction:column; align-items:flex-start; gap:0.25rem;">
+          <span style="font-size:1.5rem; font-weight:800; color:var(--danger);" id="stat-critical">—</span>
+          <span style="font-size:0.75rem; color:var(--text-secondary);">Critiques</span>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex; gap:0.5rem;">
+        <button class="btn btn-primary btn-sm" onclick="locateDriver()" style="flex:1;">
+          <i class="fas fa-crosshairs"></i> Ma position
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="loadBins()" style="flex:1;">
+          <i class="fas fa-sync-alt"></i> Actualiser
+        </button>
+      </div>
+    </div>
+
+    <!-- Liste des poubelles prioritaires -->
+    <div style="padding:0.75rem; overflow-y:auto; flex:1;">
+      <div style="font-size:0.75rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.75rem;">
+        <i class="fas fa-exclamation-triangle" style="color:var(--warning);"></i> Poubelles prioritaires (≥50%)
+      </div>
+      <div id="priority-list">
+        <div class="empty-state" style="padding:2rem 1rem;">
+          <i class="fas fa-spinner spin" style="font-size:2rem; opacity:0.4;"></i>
+          <p style="margin-top:0.75rem;">Chargement...</p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- fin driver-sidebar -->
+
+  <!-- ── Carte Leaflet ────────────────────────────────────────────────────── -->
+  <div class="map-container">
+    <div id="map"></div>
+  </div>
+
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" class="toast-container"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="../shared/js/api.js"></script>
+<script src="../shared/js/map.js"></script>
+<script>
+  // ── Vérification d'authentification ────────────────────────────────────────
+  const currentUser = requireAuth(['driver', 'admin']);
+  if (currentUser) {
+    document.getElementById('user-name').textContent = currentUser.username;
+  }
+
+  let allBins       = [];
+  let refreshTimer  = null;
+  let countdown     = 60;
+
+  /** Initialisation au chargement */
+  window.addEventListener('DOMContentLoaded', async () => {
+    initMap('map', 33.5731, -7.5898, 12);
+    await loadBins();
+    startAutoRefresh();
+  });
+
+  /** Charge toutes les poubelles depuis l'API */
+  async function loadBins() {
+    try {
+      allBins = await getBins();
+
+      // Mettre à jour les stats
+      const critical = allBins.filter(b => b.fill_percentage >= 80).length;
+      document.getElementById('stat-total').textContent    = allBins.length;
+      document.getElementById('stat-critical').textContent = critical;
+
+      // Afficher sur la carte
+      drawBinsOnMap(allBins, (bin) => {
+        centerMap(bin.latitude, bin.longitude, 17);
+      });
+
+      // Afficher les prioritaires dans le panneau
+      renderPriorityList(allBins);
+    } catch (err) {
+      showToast('Erreur : ' + err.message, 'error');
+    }
+  }
+
+  /** Rendu de la liste des poubelles prioritaires (≥50%, triées par fill desc) */
+  function renderPriorityList(bins) {
+    const container = document.getElementById('priority-list');
+    const priority  = bins
+      .filter(b => b.fill_percentage >= 50)
+      .sort((a, b) => b.fill_percentage - a.fill_percentage);
+
+    if (priority.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding:2rem 1rem;">
+          <i class="fas fa-check-circle" style="color:var(--success);"></i>
+          <p style="color:var(--success); font-weight:600;">Toutes les poubelles sont disponibles ✅</p>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = priority.map(bin => {
+      const statusClass = bin.fill_percentage < 80 ? 'medium' : 'full';
+      const fill        = Math.round(bin.fill_percentage);
+      const isCritical  = bin.fill_percentage >= 80;
+
+      return `
+        <div class="bin-list-item ${statusClass}" onclick="centerMap(${bin.latitude},${bin.longitude},17)">
+          <div class="bin-item-header">
+            <span class="bin-item-name">${bin.name}</span>
+            <span class="fill-pct ${statusClass}" style="font-size:1.1rem;">${fill}%</span>
+          </div>
+          <div class="bin-item-addr"><i class="fas fa-map-marker-alt"></i> ${bin.address}</div>
+          <div class="fill-bar fill-bar-sm" style="margin-bottom:0.5rem;">
+            <div class="fill-bar-inner ${statusClass}" style="width:${fill}%;"></div>
+          </div>
+          ${isCritical ? `
+            <button class="btn btn-danger btn-sm btn-full" onclick="event.stopPropagation(); collectBinAction(${bin.id}, '${bin.name.replace(/'/g,"\\'")}')">
+              <i class="fas fa-check"></i> Marquer Collectée
+            </button>
+          ` : `
+            <button class="btn btn-ghost btn-sm btn-full" onclick="event.stopPropagation(); collectBinAction(${bin.id}, '${bin.name.replace(/'/g,"\\'")}')">
+              <i class="fas fa-check"></i> Collecter
+            </button>
+          `}
+        </div>`;
+    }).join('');
+  }
+
+  /** Marque une poubelle comme collectée */
+  async function collectBinAction(binId, binName) {
+    if (!confirm(`Confirmer la collecte de "${binName}" ?`)) return;
+    try {
+      await collectBin(binId);
+      showToast(`✅ "${binName}" collectée avec succès`, 'success');
+      await loadBins(); // Rechargement de la liste
+    } catch (err) {
+      showToast('Erreur : ' + err.message, 'error');
+    }
+  }
+
+  /** Géolocalise le chauffeur et centre la carte sur sa position */
+  async function locateDriver() {
+    try {
+      const pos = await getUserLocation();
+      addUserMarker(pos.lat, pos.lng);
+      centerMap(pos.lat, pos.lng, 14);
+      showToast('Position détectée', 'success', 2000);
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  /** Auto-rafraîchissement toutes les 60 secondes */
+  function startAutoRefresh() {
+    countdown = 60;
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(async () => {
+      countdown--;
+      document.getElementById('auto-refresh-timer').textContent = `Actualisation dans ${countdown}s`;
+      if (countdown <= 0) {
+        await loadBins();
+        countdown = 60;
+      }
+    }, 1000);
+  }
+</script>
+
+</body>
+</html>

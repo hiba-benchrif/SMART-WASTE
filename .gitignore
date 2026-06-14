@@ -1,0 +1,38 @@
+# .gitignore — Fichiers à exclure du contrôle de version
+
+# Secrets et configuration locale
+.env
+*.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+env/
+*.egg-info/
+
+# Modèles ML (gros fichiers binaires)
+backend/ml/models/*.pkl
+
+# Logs
+backend/logs/
+raspberry_pi/data_log.txt
+*.log
+
+# Docker
+.dockerignore
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Données PostgreSQL locales
+postgres_data/

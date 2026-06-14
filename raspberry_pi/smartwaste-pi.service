@@ -1,0 +1,16 @@
+[Unit]
+Description=SmartWaste Raspberry Pi sensor service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/pi/SMART-WASTE/raspberry_pi
+EnvironmentFile=/home/pi/SMART-WASTE/raspberry_pi/.env
+ExecStart=/home/pi/SMART-WASTE/raspberry_pi/venv/bin/python /home/pi/SMART-WASTE/raspberry_pi/sensor.py
+Restart=always
+RestartSec=10
+User=pi
+
+[Install]
+WantedBy=multi-user.target
