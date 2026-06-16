@@ -1,30 +1,31 @@
 """
 ml/train_model.py — Entraînement des modèles Machine Learning SmartWaste
 
-Ce fichier entraîne et sauvegarde les modèles ML utilisés pour :
-  1. Prédire le taux de remplissage (Linear Regression)
-     → Entrée  : heure de la journée, jour de la semaine, heures écoulées
-     → Sortie  : niveau de remplissage prédit (%)
-  2. Détecter le pic hebdomadaire (analyse statistique)
-     → Identifier le jour de la semaine où les poubelles se remplissent le plus vite
+Ce fichier entraîne et sauvegarde le modèle ML utilisé pour prédire le niveau 
+de remplissage des poubelles.
 
-Les modèles sont sauvegardés au format .pkl (pickle) via joblib.
-Ils sont rechargés automatiquement lors des prédictions sans réentraînement.
+Objectifs et améliorations :
+  1. Génération de données synthétiques réalistes (pas de remise à zéro aléatoire, 
+     utilisation de l'historique récent).
+  2. Entraînement d'un modèle RandomForestRegressor, particulièrement performant 
+     pour capturer les relations non-linéaires temporelles.
+  3. Découpage strict des données (Train/Test Split) pour une évaluation honnête.
+  4. Calcul et affichage des métriques R², MAE et RMSE.
 
-Usage :
-    python ml/train_model.py
-
-Ou automatiquement au démarrage de l'app si aucun modèle n'existe.
+Le modèle est sauvegardé au format .pkl (pickle) via joblib.
 """
 
 import os
 import random
 import numpy as np
 import joblib
-from datetime import datetime, timedelta
-from sklearn.linear_model import LinearRegression
+from datetime import datetime, timezone, timedelta
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import math
 
 # Chemin vers le dossier de sauvegarde des modèles
 MODELS_DIR = os.path.join(os.path.dirname(__file__), "models")
@@ -35,95 +36,133 @@ def generate_synthetic_data(num_bins: int = 10, days: int = 30) -> list:
     """
     Génère des données synthétiques réalistes pour entraîner le modèle.
 
-    Simule le comportement de remplissage d'une poubelle :
-    - Remplissage plus rapide les jours de marché (vendredi/samedi)
-    - Variations diurnes (plus de déchets en journée)
-    - Bruit aléatoire pour simuler la réalité
-
+    Améliorations par rapport à la version précédente :
+    - Ajout de la variable `hours_since_last_collection`.
+    - Ajout de la variable `previous_fill_level`.
+    - Remise à zéro stricte lors de la collecte (au lieu d'une valeur aléatoire).
+    
     Args:
         num_bins: Nombre de poubelles simulées.
         days: Nombre de jours d'historique à générer.
 
     Returns:
-        Liste de tuples (heure, jour_semaine, heures_écoulées, fill_percentage).
+        Liste de tuples (heure, jour_semaine, heures_depuis_collecte, niveau_precedent, remplissage_actuel).
     """
     data = []
-    now = datetime.utcnow()
+    # Utilisation de datetime.now(timezone.utc) recommandé dans les versions modernes de Python
+    now = datetime.now(timezone.utc)
 
     for bin_num in range(num_bins):
-        # Chaque poubelle a un taux de base différent (2 à 8% par heure)
-        base_rate = random.uniform(2.0, 8.0)
-        fill = random.uniform(0, 30)  # Niveau de départ aléatoire
+        # Taux de remplissage de base (entre 1% et 5% par heure)
+        base_rate = random.uniform(1.0, 5.0)
+        
+        # État initial
+        current_fill = 0.0
+        hours_since_last_collection = 0
 
-        for hour_offset in range(days * 24):
-            ts = now - timedelta(hours=(days * 24) - hour_offset)
+        # On itère chronologiquement du passé vers le présent
+        total_hours = days * 24
+        for hour_offset in range(total_hours, 0, -1):
+            ts = now - timedelta(hours=hour_offset)
             hour_of_day = ts.hour
             day_of_week = ts.weekday()
 
-            # Multiplicateur journalier :
-            # Vendredi (4) et Samedi (5) → +30% de déchets (marché, weekend)
+            # Mémorisation du niveau de l'heure précédente
+            previous_fill_level = current_fill
+
+            # Multiplicateur journalier (Vendredi/Samedi = plus de déchets)
             day_multiplier = 1.3 if day_of_week in (4, 5) else 1.0
 
-            # Multiplicateur horaire : plus de déchets entre 7h et 20h
+            # Multiplicateur horaire (journée = plus actif, nuit = calme)
             if 7 <= hour_of_day <= 20:
                 hour_multiplier = 1.5
             elif hour_of_day <= 6:
-                hour_multiplier = 0.3
+                hour_multiplier = 0.2
             else:
                 hour_multiplier = 0.8
 
-            # Incrément de remplissage pour cette heure
-            increment = base_rate * day_multiplier * hour_multiplier / 24
-            increment += random.uniform(-0.5, 1.0)  # Bruit aléatoire
-            fill = min(100, fill + max(0, increment))
+            # Calcul du nouveau niveau avec une légère composante aléatoire (bruit)
+            increment = base_rate * day_multiplier * hour_multiplier
+            increment += random.uniform(-0.5, 0.5)
+            
+            # Mise à jour de l'état
+            current_fill = previous_fill_level + max(0, increment)
+            hours_since_last_collection += 1
 
-            # Simulation d'une collecte (remise à 0) quand la poubelle est pleine
-            if fill >= 95:
-                fill = random.uniform(0, 10)
+            # Simulation d'une collecte stricte si la poubelle dépasse 95%
+            if current_fill >= 95.0:
+                current_fill = 0.0
+                hours_since_last_collection = 0
 
-            data.append((hour_of_day, day_of_week, hour_offset, round(fill, 1)))
+            # On s'assure que le niveau ne dépasse jamais 100%
+            current_fill = min(100.0, current_fill)
+
+            # Ajout de l'échantillon au dataset
+            data.append((
+                hour_of_day, 
+                day_of_week, 
+                hours_since_last_collection, 
+                round(previous_fill_level, 1), 
+                round(current_fill, 1)
+            ))
 
     return data
 
 
 def train_fill_predictor() -> Pipeline:
     """
-    Entraîne un modèle de régression linéaire pour prédire le remplissage.
+    Entraîne un modèle Random Forest pour prédire le remplissage.
 
-    Caractéristiques (features) :
-      - hour_of_day   : heure de la journée (0-23)
-      - day_of_week   : jour de la semaine (0=Lundi, 6=Dimanche)
-      - hours_elapsed : nombre d'heures écoulées depuis le début
+    Caractéristiques (features X) :
+      - hour_of_day                 : Heure de la journée (0-23)
+      - day_of_week                 : Jour de la semaine (0-6)
+      - hours_since_last_collection : Heures écoulées depuis le dernier vidage
+      - previous_fill_level         : Niveau de remplissage à t-1
 
-    Cible (target) :
-      - fill_percentage : niveau de remplissage (0-100%)
-
-    Le modèle est encapsulé dans un Pipeline scikit-learn avec
-    un StandardScaler pour normaliser les features.
+    Cible (target y) :
+      - current_fill                : Niveau de remplissage à t
 
     Returns:
-        Pipeline sklearn entraîné (StandardScaler + LinearRegression).
+        Pipeline sklearn entraîné.
     """
     print("📊 Génération des données d'entraînement...")
     raw_data = generate_synthetic_data(num_bins=20, days=60)
 
-    # Séparation features / target
-    X = np.array([[h, d, e] for h, d, e, _ in raw_data])
-    y = np.array([fill for _, _, _, fill in raw_data])
+    # Séparation features (X) / target (y)
+    X = np.array([[h, d, hs, p] for h, d, hs, p, _ in raw_data])
+    y = np.array([current_fill for _, _, _, _, current_fill in raw_data])
 
     print(f"   → {len(X)} échantillons générés")
 
-    # Pipeline : normalisation + régression linéaire
+    # Découpage strict : 80% Entraînement, 20% Test
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    # Pipeline : Normalisation + Random Forest Regressor
+    # Random Forest est excellent pour capturer les ruptures brutales (remises à 0)
     model = Pipeline([
         ("scaler", StandardScaler()),
-        ("regressor", LinearRegression()),
+        ("regressor", RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)),
     ])
 
-    model.fit(X, y)
+    print("🧠 Entraînement du modèle RandomForestRegressor en cours...")
+    model.fit(X_train, y_train)
 
-    # Qualité du modèle
-    score = model.score(X, y)
-    print(f"   → Score R² du modèle : {score:.4f}")
+    # Prédictions sur l'ensemble de TEST (jamais vu par le modèle pendant l'entraînement)
+    y_pred = model.predict(X_test)
+
+    # Calcul des métriques de performance
+    score_r2 = r2_score(y_test, y_pred)
+    mae = mean_absolute_error(y_test, y_pred)
+    rmse = math.sqrt(mean_squared_error(y_test, y_pred))
+
+    print("\n📈 RÉSULTATS DE L'ÉVALUATION (SUR ENSEMBLE DE TEST) :")
+    print("-" * 55)
+    print(f"   → Score R²  : {score_r2:.4f}")
+    print(f"   → MAE       : {mae:.2f} % (Erreur Absolue Moyenne)")
+    print(f"   → RMSE      : {rmse:.2f} % (Racine Erreur Quadratique Moyenne)")
+    print("-" * 55)
 
     return model
 
@@ -131,39 +170,27 @@ def train_fill_predictor() -> Pipeline:
 def save_models(fill_model: Pipeline) -> None:
     """
     Sauvegarde les modèles entraînés au format .pkl avec joblib.
-
-    joblib est préféré à pickle pour les objets numpy/sklearn
-    car il est plus efficace pour les grands tableaux.
-
-    Args:
-        fill_model: Pipeline sklearn entraîné.
     """
     os.makedirs(MODELS_DIR, exist_ok=True)
     joblib.dump(fill_model, FILL_MODEL_PATH)
-    print(f"✅ Modèle sauvegardé : {FILL_MODEL_PATH}")
+    print(f"✅ Modèle sauvegardé avec succès : {FILL_MODEL_PATH}")
 
 
 def main():
     """
     Pipeline complet d'entraînement des modèles ML.
-
-    Étapes :
-      1. Génération des données synthétiques
-      2. Entraînement du modèle de régression
-      3. Sauvegarde des modèles
     """
-    print("🤖 Démarrage de l'entraînement des modèles SmartWaste ML...")
+    print("🤖 Démarrage du pipeline SmartWaste ML...")
     print("=" * 55)
 
-    # Entraînement du prédicteur de remplissage
+    # Entraînement du modèle de remplissage
     fill_model = train_fill_predictor()
 
     # Sauvegarde
     save_models(fill_model)
 
     print("=" * 55)
-    print("✅ Entraînement terminé avec succès !")
-    print(f"   Modèles sauvegardés dans : {MODELS_DIR}/")
+    print("🚀 Processus terminé avec succès !")
 
 
 if __name__ == "__main__":

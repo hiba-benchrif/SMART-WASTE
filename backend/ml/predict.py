@@ -59,28 +59,18 @@ def load_fill_predictor():
 
 def predict_hours_until_full(bin_id: int) -> dict:
     """
-    Prédit le nombre d'heures restantes avant qu'une poubelle soit pleine.
+    Prédit le nombre d'heures restantes avant qu'une poubelle soit pleine
+    en utilisant VÉRITABLEMENT le modèle Machine Learning (RandomForest).
 
     Algorithme :
-      1. Récupère les 50 dernières mesures BinLevel de la poubelle
-      2. Calcule la vitesse de remplissage (% par heure) entre la 1ère et dernière mesure
-      3. Si pas assez de données, utilise un taux par défaut (DEFAULT_FILL_RATE_PER_HOUR)
-      4. Calcule : heures_restantes = (100 - fill_actuel) / vitesse
-      5. Retourne la prédiction formatée avec un niveau de confiance
-
-    Niveaux de confiance :
-      - 'high'   : ≥ 20 mesures disponibles
-      - 'medium' : 5 à 19 mesures
-      - 'low'    : < 5 mesures (estimation peu fiable)
-
-    Args:
-        bin_id: Identifiant de la poubelle à analyser.
-
-    Returns:
-        Dictionnaire de prédiction (voir format_prediction_response).
+      1. Récupère l'historique et calcule le temps depuis la dernière collecte.
+      2. Simule le temps heure par heure dans le futur.
+      3. Interroge le modèle ML à chaque itération pour prédire le niveau.
+      4. S'arrête quand la prédiction atteint 100% ou après 7 jours max (168h).
     """
-    # Import ici pour éviter les imports circulaires avec Flask
     from models import Bin, BinLevel
+    from datetime import datetime, timedelta
+    import numpy as np
 
     # Récupération de la poubelle
     bin_item = Bin.query.get(bin_id)
@@ -91,25 +81,13 @@ def predict_hours_until_full(bin_id: int) -> dict:
 
     # Cas trivial : poubelle déjà pleine
     if current_fill >= 100:
-        return {
-            "bin_id": bin_id,
-            "current_fill_percentage": current_fill,
-            "fill_speed_per_hour": 0,
-            "hours_until_full": 0,
-            "predicted_full_at_utc": None,
-            "confidence": "high",
-            "message": "La poubelle est déjà pleine — collecte requise immédiatement",
-        }
+        return format_prediction_response(
+            bin_id=bin_id, current_fill=current_fill, fill_speed=0,
+            hours_until_full=0, confidence="high"
+        )
 
-    # Récupération des 50 dernières mesures
-    levels = (
-        BinLevel.query
-        .filter_by(bin_id=bin_id)
-        .order_by(BinLevel.timestamp.asc())
-        .limit(50)
-        .all()
-    )
-
+    # Récupération de l'historique pour déterminer la dernière collecte
+    levels = BinLevel.query.filter_by(bin_id=bin_id).order_by(BinLevel.timestamp.asc()).all()
     num_records = len(levels)
 
     # ── Calcul du niveau de confiance ────────────────────────────────────────
@@ -120,39 +98,53 @@ def predict_hours_until_full(bin_id: int) -> dict:
     else:
         confidence = "low"
 
-    # ── Calcul de la vitesse de remplissage ───────────────────────────────────
-    if num_records >= MIN_RECORDS_FOR_PREDICTION:
-        first = levels[0]
-        last = levels[-1]
+    # ── Calcul des heures depuis la dernière collecte ────────────────────────
+    hours_since_last_collection = 0
+    if levels:
+        last_lvl = levels[-1]
+        last_collect_time = levels[0].timestamp
+        # On remonte l'historique pour trouver le dernier vidage (<= 5%)
+        for lvl in reversed(levels):
+            if lvl.fill_percentage <= 5.0:
+                last_collect_time = lvl.timestamp
+                break
+        hours_since_last_collection = int((last_lvl.timestamp - last_collect_time).total_seconds() / 3600)
 
-        # Durée entre la première et dernière mesure (en heures)
-        time_delta = (last.timestamp - first.timestamp).total_seconds() / 3600
+    # ── Simulation temporelle avec le modèle ML ──────────────────────────────
+    model = load_fill_predictor()
+    
+    simulated_fill = current_fill
+    now = datetime.utcnow()
+    hours_ahead = 0
+    max_simulation_hours = 168  # Ne pas simuler au-delà d'une semaine
 
-        if time_delta > 0:
-            # Vitesse moyenne de remplissage (% par heure)
-            fill_delta = last.fill_percentage - first.fill_percentage
-            fill_speed = fill_delta / time_delta
-        else:
-            fill_speed = DEFAULT_FILL_RATE_PER_HOUR
+    while simulated_fill < 100.0 and hours_ahead < max_simulation_hours:
+        hours_ahead += 1
+        future_time = now + timedelta(hours=hours_ahead)
+        
+        # Le RandomForest attend 4 variables : hour, day_of_week, hours_since, previous_fill
+        X_input = np.array([[
+            future_time.hour,
+            future_time.weekday(),
+            hours_since_last_collection + hours_ahead,
+            simulated_fill
+        ]])
+        
+        # Le modèle prédit le niveau de remplissage pour l'heure H+1
+        predicted_next = model.predict(X_input)[0]
+        
+        # On s'assure mathématiquement que le niveau ne baisse pas 
+        # (le camion ne passera pas tout seul dans la simulation)
+        simulated_fill = max(simulated_fill, predicted_next)
+
+    # Si le modèle prévoit qu'elle ne sera pas pleine d'ici 1 semaine
+    if hours_ahead >= max_simulation_hours:
+        hours_until_full = max_simulation_hours
     else:
-        # Pas assez de données → utiliser le taux par défaut
-        fill_speed = DEFAULT_FILL_RATE_PER_HOUR
+        hours_until_full = hours_ahead
 
-    # La vitesse ne peut pas être négative pour une prédiction de remplissage
-    if fill_speed <= 0:
-        return {
-            "bin_id": bin_id,
-            "current_fill_percentage": current_fill,
-            "fill_speed_per_hour": round(fill_speed, 2),
-            "hours_until_full": None,
-            "predicted_full_at_utc": None,
-            "confidence": confidence,
-            "message": "Le niveau de remplissage est stable ou en baisse",
-        }
-
-    # ── Calcul des heures restantes ───────────────────────────────────────────
-    remaining_fill = 100 - current_fill
-    hours_until_full = remaining_fill / fill_speed
+    # Calcul d'une "vitesse moyenne" indicative pour l'interface
+    fill_speed = (100 - current_fill) / hours_until_full if hours_until_full > 0 else 0
 
     return format_prediction_response(
         bin_id=bin_id,
