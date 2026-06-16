@@ -111,11 +111,27 @@ def create_app(config_class=Config) -> Flask:
         # Créer toutes les tables si elles n'existent pas encore
         db.create_all()
 
+        # ── Auto-seed au démarrage ────────────────────────────────────────────
+        # Sur Hugging Face Spaces, la base de données SQLite est réinitialisée
+        # à chaque redémarrage du conteneur. Ce bloc recrée automatiquement les
+        # comptes admin/driver et les données de démo si la base est vide.
+        from models import User
+        if not User.query.filter_by(email="admin@smartwaste.local").first():
+            logging.getLogger(__name__).info("Base vide détectée — démarrage du seed automatique...")
+            try:
+                from routes.analytics import seed_demo_data
+                with app.test_request_context():
+                    seed_demo_data()
+                logging.getLogger(__name__).info("Seed automatique terminé avec succès ✅")
+            except Exception as e:
+                logging.getLogger(__name__).warning(f"Seed automatique échoué : {e}")
+
         # S'assurer que le dossier des modèles ML existe
         models_path = app.config.get("ML_MODELS_PATH", "ml/models")
         os.makedirs(models_path, exist_ok=True)
 
     return app
+
 
 
 # Création de l'instance globale de l'application
