@@ -125,7 +125,7 @@ def train_fill_predictor() -> Pipeline:
     Returns:
         Pipeline sklearn entraîné.
     """
-    print("📊 Génération des données d'entraînement...")
+    print(" Génération des données d'entraînement...")
     raw_data = generate_synthetic_data(num_bins=20, days=60)
 
     # Séparation features (X) / target (y)
@@ -146,7 +146,7 @@ def train_fill_predictor() -> Pipeline:
         ("regressor", RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)),
     ])
 
-    print("🧠 Entraînement du modèle RandomForestRegressor en cours...")
+    print(" Entraînement du modèle RandomForestRegressor en cours...")
     model.fit(X_train, y_train)
 
     # Prédictions sur l'ensemble de TEST (jamais vu par le modèle pendant l'entraînement)
@@ -157,7 +157,7 @@ def train_fill_predictor() -> Pipeline:
     mae = mean_absolute_error(y_test, y_pred)
     rmse = math.sqrt(mean_squared_error(y_test, y_pred))
 
-    print("\n📈 RÉSULTATS DE L'ÉVALUATION (SUR ENSEMBLE DE TEST) :")
+    print("\n RÉSULTATS DE L'ÉVALUATION (SUR ENSEMBLE DE TEST) :")
     print("-" * 55)
     print(f"   → Score R²  : {score_r2:.4f}")
     print(f"   → MAE       : {mae:.2f} % (Erreur Absolue Moyenne)")
@@ -173,14 +173,14 @@ def save_models(fill_model: Pipeline) -> None:
     """
     os.makedirs(MODELS_DIR, exist_ok=True)
     joblib.dump(fill_model, FILL_MODEL_PATH)
-    print(f"✅ Modèle sauvegardé avec succès : {FILL_MODEL_PATH}")
+    print(f"Modèle sauvegardé avec succès : {FILL_MODEL_PATH}")
 
 
 def main():
     """
     Pipeline complet d'entraînement des modèles ML.
     """
-    print("🤖 Démarrage du pipeline SmartWaste ML...")
+    print(" Démarrage du pipeline SmartWaste ML...")
     print("=" * 55)
 
     # Entraînement du modèle de remplissage
@@ -190,7 +190,7 @@ def main():
     save_models(fill_model)
 
     print("=" * 55)
-    print("🚀 Processus terminé avec succès !")
+    print(" Processus terminé avec succès !")
 
 
 if __name__ == "__main__":

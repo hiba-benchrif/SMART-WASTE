@@ -45,14 +45,14 @@ def load_fill_predictor():
 
     if not os.path.exists(FILL_MODEL_PATH):
         # Entraînement automatique si le modèle n'existe pas encore
-        print("🤖 Modèle ML absent — entraînement automatique...")
+        print(" Modèle ML absent — entraînement automatique...")
         from ml.train_model import train_fill_predictor, save_models
         model = train_fill_predictor()
         save_models(model)
         _fill_model = model
     else:
         _fill_model = joblib.load(FILL_MODEL_PATH)
-        print(f"✅ Modèle ML chargé depuis {FILL_MODEL_PATH}")
+        print(f" Modèle ML chargé depuis {FILL_MODEL_PATH}")
 
     return _fill_model
 
