@@ -129,6 +129,16 @@ async function apiRequest(path, options = {}) {
   }
 
   if (!response.ok) {
+    // Si le token JWT est expiré ou invalide → rediriger vers login
+    if (response.status === 401) {
+      // Ne pas rediriger si on est déjà sur la page de login
+      if (!window.location.pathname.includes('login')) {
+        localStorage.removeItem('sw_token');
+        localStorage.removeItem('sw_user');
+        window.location.href = '../login.html';
+        return;
+      }
+    }
     throw new Error(data.error || data.message || `Erreur HTTP ${response.status}`);
   }
 
